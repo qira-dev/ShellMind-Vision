@@ -17,7 +17,7 @@ const PORT = Number(process.env.SHELLMIND_VISION_PORT || process.env.DESKTOP_UI_
 const HOST = process.env.SHELLMIND_VISION_HOST || process.env.DESKTOP_UI_MCP_HOST || '127.0.0.1';
 const DAEMON_URL = `http://${HOST}:${PORT}/mcp`;
 const HEALTH_URL = `http://${HOST}:${PORT}/health`;
-const TOKEN_DIR = process.env.XDG_RUNTIME_DIR || path.join(ROOT_DIR, 'data');
+const TOKEN_DIR = path.join(ROOT_DIR, 'data');
 const TOKEN_FILE = path.join(TOKEN_DIR, 'shellmind-vision.token');
 
 let fallbackBridge = null;

@@ -17,7 +17,7 @@ const ROOT_DIR = process.env.SHELLMIND_VISION_ROOT || __dirname;
 const PORT = Number(process.env.SHELLMIND_VISION_PORT || process.env.DESKTOP_UI_MCP_PORT) || 39200;
 const HOST = process.env.SHELLMIND_VISION_HOST || process.env.DESKTOP_UI_MCP_HOST || '127.0.0.1';
 
-const TOKEN_DIR = process.env.XDG_RUNTIME_DIR || path.join(ROOT_DIR, 'data');
+const TOKEN_DIR = path.join(ROOT_DIR, 'data');
 const TOKEN_FILE = path.join(TOKEN_DIR, 'shellmind-vision.token');
 fs.mkdirSync(TOKEN_DIR, { recursive: true });
 let AUTH_TOKEN = '';
