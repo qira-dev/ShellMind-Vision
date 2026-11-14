@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "shellmind-vision": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-stdio.mjs"]
+    }
+  }
+}
