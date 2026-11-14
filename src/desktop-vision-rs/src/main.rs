@@ -274,7 +274,9 @@ pub fn inspect_svg(file_path_or_xml: &str, include_paths: bool, max_elements: us
         }
 
         if tag_name == "defs" {
-            in_defs = true;
+            if !tag_trimmed.ends_with('/') {
+                in_defs = true;
+            }
             continue;
         }
 
@@ -911,27 +913,47 @@ fn run_tesseract_tsv_region(
     } else {
         lang
     };
-    let mut child = match Command::new("/usr/bin/nice")
-        .args(["-n", "15", &tess_bin, "stdin", "stdout", "-l", effective_lang, "--oem", "1", "--psm", psm, "tsv"])
-        .env("LD_LIBRARY_PATH", &tess_lib)
+    let run_once = |bin: &str, use_bundled_lib: bool| -> Option<std::process::Output> {
+        let mut cmd = Command::new("/usr/bin/nice");
+        cmd.args([
+            "-n",
+            "15",
+            bin,
+            "stdin",
+            "stdout",
+            "-l",
+            effective_lang,
+            "--oem",
+            "1",
+            "--psm",
+            psm,
+            "tsv",
+        ])
         .env("TESSDATA_PREFIX", &tess_data)
         .env("OMP_THREAD_LIMIT", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-    {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
+        .stderr(Stdio::piped());
+        if use_bundled_lib {
+            cmd.env("LD_LIBRARY_PATH", &tess_lib);
+        } else {
+            cmd.env_remove("LD_LIBRARY_PATH");
+        }
+        let mut child = cmd.spawn().ok()?;
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(&pgm_bytes);
+        }
+        let out = child.wait_with_output().ok()?;
+        if out.status.success() {
+            Some(out)
+        } else {
+            None
+        }
     };
 
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(&pgm_bytes);
-    }
-
-    let output = match child.wait_with_output() {
-        Ok(o) => o,
-        Err(_) => return Vec::new(),
+    let output = match run_once(&tess_bin, true).or_else(|| run_once("tesseract", false)) {
+        Some(o) => o,
+        None => return Vec::new(),
     };
 
     let tsv = String::from_utf8_lossy(&output.stdout);

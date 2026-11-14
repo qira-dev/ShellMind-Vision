@@ -152,11 +152,25 @@ def focused_window():
 
 
 def walk_app_tree(app_query="", max_depth=28, max_nodes=400, interactive_only=False):
+    import time
+    max_depth = max(1, min(int(max_depth or 28), 64))
+    max_nodes = max(1, min(int(max_nodes or 400), 2000))
+    if hasattr(Atspi, "set_timeout"):
+        try:
+            Atspi.set_timeout(500, 2000)
+        except Exception:
+            pass
+    deadline = time.monotonic() + 15.0
+    timed_out = False
     desktop = Atspi.get_desktop(0)
     q = (app_query or "").lower().strip()
     nodes = []
 
     def walk(obj, path_str, depth):
+        nonlocal timed_out
+        if time.monotonic() >= deadline:
+            timed_out = True
+            return
         if len(nodes) >= max_nodes or depth > max_depth or not obj:
             return
         try:
@@ -262,9 +276,10 @@ def walk_app_tree(app_query="", max_depth=28, max_nodes=400, interactive_only=Fa
 
 def invoke_node(node_path, action_index=0, set_text=None, grab_focus=True):
     desktop = Atspi.get_desktop(0)
-    parts = [int(p) for p in str(node_path).strip("/").split("/") if p.strip().isdigit()]
-    if not parts:
-        return {"ok": False, "error": f"Invalid node_path: {node_path}"}
+    raw_parts = [p.strip() for p in str(node_path).strip("/").split("/") if p.strip() != ""]
+    if not raw_parts or not all(p.isdigit() for p in raw_parts):
+        return {"ok": False, "error": f"Invalid node_path (all segments must be non-negative integers): {node_path}"}
+    parts = [int(p) for p in raw_parts]
 
     curr = desktop
     for idx in parts:
