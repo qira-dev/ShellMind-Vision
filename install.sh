@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AxiomVision — Universal AI Desktop Automation Engine
+# ShellMind Vision — Universal AI Desktop Automation Engine
 # 1-Liner Zero-Dependency Self-Contained Installer
 # ==============================================================================
 set -euo pipefail
@@ -12,13 +12,13 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${BOLD}${BLUE}=== AxiomVision Installer (Zero-Hallucination Desktop Automation Engine) ===${NC}"
+echo -e "${BOLD}${BLUE}=== ShellMind Vision Installer (Zero-Hallucination Desktop Automation Engine) ===${NC}"
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
 if [[ "${OS}" != "Linux" ]]; then
-    echo -e "${RED}[!] Currently AxiomVision automated installer supports Linux (Ubuntu 22.04 / 24.04 / 26.04 GNOME Wayland & X11).${NC}"
+    echo -e "${RED}[!] Currently ShellMind Vision automated installer supports Linux (Ubuntu 22.04 / 24.04 / 26.04 GNOME Wayland & X11).${NC}"
     echo -e "    Windows & macOS native engine adapters are in development."
     exit 1
 fi
@@ -27,7 +27,7 @@ if [[ "${ARCH}" != "x86_64" ]]; then
     echo -e "${YELLOW}[!] Warning: System architecture is ${ARCH}. Pre-built binaries target x86_64.${NC}"
 fi
 
-INSTALL_DIR="${HOME}/.local/share/axiom-vision"
+INSTALL_DIR="${HOME}/.local/share/shellmind-vision"
 BIN_DIR="${HOME}/.local/bin"
 EXT_DIR="${HOME}/.local/share/gnome-shell/extensions/computer-use-linux@avifenesh.dev"
 
@@ -35,15 +35,15 @@ mkdir -p "${INSTALL_DIR}" "${BIN_DIR}" "${HOME}/.local/share/gnome-shell/extensi
 
 # Check if running locally inside the repo
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
-if [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/server.mjs" && -f "${SCRIPT_DIR}/axiomvision" ]]; then
+if [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/server.mjs" && -f "${SCRIPT_DIR}/shellmind-vision" ]]; then
     echo -e "${BLUE}[*] Installing from local source: ${SCRIPT_DIR}...${NC}"
     TARGET_DIR="${SCRIPT_DIR}"
 else
-    echo -e "${BLUE}[*] Cloning AxiomVision into ${INSTALL_DIR}...${NC}"
+    echo -e "${BLUE}[*] Cloning ShellMind Vision into ${INSTALL_DIR}...${NC}"
     if [[ -d "${INSTALL_DIR}/.git" ]]; then
         git -C "${INSTALL_DIR}" pull --quiet
     else
-        git clone --depth 1 https://github.com/qira-dev/AxiomVision.git "${INSTALL_DIR}"
+        git clone --depth 1 https://github.com/qira-dev/ShellMind-Vision.git "${INSTALL_DIR}"
     fi
     TARGET_DIR="${INSTALL_DIR}"
 fi
@@ -60,10 +60,10 @@ fi
 if [[ "${NEED_NODE}" -eq 1 && ! -x "${TARGET_DIR}/runtime/node/bin/node" ]]; then
     echo -e "${BLUE}[*] Bundling self-contained portable Node.js v22 runtime (zero sudo required)...${NC}"
     mkdir -p "${TARGET_DIR}/runtime"
-    NODE_TAR="/tmp/axiomvision-node-v22.tar.xz"
+    NODE_TAR="/tmp/shellmind-vision-node-v22.tar.xz"
     python3 -c '
 import urllib.request
-urllib.request.urlretrieve("https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.xz", "/tmp/axiomvision-node-v22.tar.xz")
+urllib.request.urlretrieve("https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.xz", "/tmp/shellmind-vision-node-v22.tar.xz")
 '
     tar -xJf "${NODE_TAR}" -C "${TARGET_DIR}/runtime"
     mv "${TARGET_DIR}/runtime/node-v22.14.0-linux-x64" "${TARGET_DIR}/runtime/node"
@@ -84,10 +84,10 @@ fi
 echo -e "${BLUE}[*] Enabling GNOME toolkit-accessibility...${NC}"
 gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
 
-# 4. Symlink executable to ~/.local/bin/axiomvision
-chmod +x "${TARGET_DIR}/axiomvision" "${TARGET_DIR}/server.mjs" "${TARGET_DIR}/mcp-stdio.mjs" \
+# 4. Symlink executable to ~/.local/bin/shellmind-vision
+chmod +x "${TARGET_DIR}/shellmind-vision" "${TARGET_DIR}/server.mjs" "${TARGET_DIR}/mcp-stdio.mjs" \
          "${TARGET_DIR}/bin/"* "${TARGET_DIR}/native_ocr/root/usr/bin/"*
-ln -sf "${TARGET_DIR}/axiomvision" "${BIN_DIR}/axiomvision"
+ln -sf "${TARGET_DIR}/shellmind-vision" "${BIN_DIR}/shellmind-vision"
 
 # Ensure ~/.local/bin is in PATH
 if [[ ":${PATH}:" != *":${BIN_DIR}:"* ]]; then
@@ -98,16 +98,16 @@ if [[ ":${PATH}:" != *":${BIN_DIR}:"* ]]; then
     fi
 fi
 
-# 5. Start AxiomVision Daemon & Run Diagnostics
-echo -e "${BLUE}[*] Starting AxiomVision background service...${NC}"
-"${TARGET_DIR}/axiomvision" restart
+# 5. Start ShellMind Vision Daemon & Run Diagnostics
+echo -e "${BLUE}[*] Starting ShellMind Vision background service...${NC}"
+"${TARGET_DIR}/shellmind-vision" restart
 
-echo -e "\n${BOLD}${GREEN}✔ AxiomVision successfully installed and running on port 39200!${NC}\n"
+echo -e "\n${BOLD}${GREEN}✔ ShellMind Vision successfully installed and running on port 39200!${NC}\n"
 echo -e "Commands:"
-echo -e "  • Check status : ${BOLD}axiomvision status${NC}"
-echo -e "  • View logs    : ${BOLD}axiomvision logs${NC}"
-echo -e "  • Stop daemon  : ${BOLD}axiomvision stop${NC}"
-echo -e "  • Add language : ${BOLD}axiomvision lang add <lang_code>${NC} (123 languages: ben, jpn, fra, spa, hin, ara, etc.)"
+echo -e "  • Check status : ${BOLD}shellmind-vision status${NC}"
+echo -e "  • View logs    : ${BOLD}shellmind-vision logs${NC}"
+echo -e "  • Stop daemon  : ${BOLD}shellmind-vision stop${NC}"
+echo -e "  • Add language : ${BOLD}shellmind-vision lang add <lang_code>${NC} (123 languages: ben, jpn, fra, spa, hin, ara, etc.)"
 echo -e ""
 echo -e "Configure your IDE or Agent:"
 echo -e "  • Streamable HTTP : ${BOLD}http://127.0.0.1:39200/mcp${NC}"

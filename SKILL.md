@@ -1,16 +1,16 @@
 ---
-name: axiom-vision
-description: Mandatory skill for deterministic desktop UI inspection, application launching, on-demand 123-language OCR provisioning, silent in-memory window/desktop screenshot analysis, batch image OCR, SVG structural parsing, and direct AT-SPI2 D-Bus automation via AxiomVision on http://127.0.0.1:39200/mcp.
+name: shellmind-vision
+description: Mandatory skill for deterministic desktop UI inspection, application launching, on-demand 123-language OCR provisioning, silent in-memory window/desktop screenshot analysis, batch image OCR, SVG structural parsing, and direct AT-SPI2 D-Bus automation via ShellMind Vision on http://127.0.0.1:39200/mcp.
 ---
-# AxiomVision — Deterministic Vision & Desktop Automation Skill
+# ShellMind Vision — Deterministic Vision & Desktop Automation Skill
 
-Use the local `AxiomVision` engine (`http://127.0.0.1:39200/mcp` or `node ~/.local/share/axiom-vision/mcp-stdio.mjs`) to deterministically launch, inspect, and control desktop applications, windows, images, screenshots, and SVG files without relying on Vision LLM guessing.
+Use the local `ShellMind Vision` engine (`http://127.0.0.1:39200/mcp` or `node ~/.local/share/shellmind-vision/mcp-stdio.mjs`) to deterministically launch, inspect, and control desktop applications, windows, images, screenshots, and SVG files without relying on Vision LLM guessing.
 
 ---
 
 ## 1. Core Operating Principles
 
-1. **Zero Vision LLM Guessing:** Never estimate pixel coordinates or guess small terminal/UI text using internal Vision LLM capabilities. Always rely on `AxiomVision` tool outputs (`center.x, center.y`, `bbox`, `text`, and `atspi_ground_truth_text`).
+1. **Zero Vision LLM Guessing:** Never estimate pixel coordinates or guess small terminal/UI text using internal Vision LLM capabilities. Always rely on `ShellMind Vision` tool outputs (`center.x, center.y`, `bbox`, `text`, and `atspi_ground_truth_text`).
 2. **Browser Isolation:** When working inside an IDE with a built-in browser view (Antigravity, ZCode, Cursor), use the IDE's internal browser rather than hijacking the user's host OS browsers (Brave, Chrome, Firefox) unless explicitly requested.
 3. **In-Memory Zero-Disk Pipeline:** For live windows or desktop state, use `screenshot_and_ocr` rather than saving temporary `.png` files to `/tmp`.
 

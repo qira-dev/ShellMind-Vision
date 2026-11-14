@@ -1,17 +1,17 @@
-# AxiomVision — Mandatory Agent Operational Rulebook
+# ShellMind Vision — Mandatory Agent Operational Rulebook
 
-This document defines the mandatory operational rules for any AI agent connected to **AxiomVision** (`http://127.0.0.1:39200/mcp` or `mcp-stdio.mjs`). Every rule in this specification is binding across all desktop inspection, OCR, SVG parsing, and UI automation tasks.
+This document defines the mandatory operational rules for any AI agent connected to **ShellMind Vision** (`http://127.0.0.1:39200/mcp` or `mcp-stdio.mjs`). Every rule in this specification is binding across all desktop inspection, OCR, SVG parsing, and UI automation tasks.
 
 ---
 
 ## RULE 1: ZERO VISION LLM HALLUCINATION (MANDATORY DETERMINISTIC ENGINE)
 
 1. **No Visual Guessing:** Even if your foundation model includes built-in multimodal Vision capabilities, you are **strictly forbidden** from using Vision LLM estimation to guess pixel coordinates, estimate button positions, or transcribe dense terminal/UI text or SVG files.
-2. **Deterministic Grounding Only:** Every coordinate you click (`center.x, center.y`), every UI element you invoke (`node_path` / `element_index`), and every screen string you read must come directly from `AxiomVision` tool outputs.
+2. **Deterministic Grounding Only:** Every coordinate you click (`center.x, center.y`), every UI element you invoke (`node_path` / `element_index`), and every screen string you read must come directly from `ShellMind Vision` tool outputs.
 
 ```
 +------------------------------------------------------------------------------+
-|                   AXIOMVISION DETERMINISTIC ROUTING HIERARCHY                |
+|                   SHELLMIND VISION DETERMINISTIC ROUTING HIERARCHY                |
 +------------------------------------------------------------------------------+
 |                                                                              |
 |                        [ Incoming Visual or UI Task ]                        |
@@ -41,14 +41,14 @@ This document defines the mandatory operational rules for any AI agent connected
 
 ## RULE 2: GATE 0 — JUST-IN-TIME LANGUAGE ONBOARDING (123+ LANGUAGES)
 
-To keep the repository feather-light (~40 MB), only English (`eng`) is pre-installed on a fresh clone. `AxiomVision` supports **123+ quantized fast OCR language models** on demand with zero daemon restarts:
+To keep the repository feather-light (~40 MB), only English (`eng`) is pre-installed on a fresh clone. `ShellMind Vision` supports **123+ quantized fast OCR language models** on demand with zero daemon restarts:
 
 ```
 +------------------------------------------------------------------------------+
 |                  GATE 0: ON-DEMAND LANGUAGE PROVISIONING FLOW                |
 +------------------------------------------------------------------------------+
 |                                                                              |
-|   [ Agent Connects to AxiomVision ]                                          |
+|   [ Agent Connects to ShellMind Vision ]                                          |
 |                 |                                                            |
 |                 v                                                            |
 |   +----------------------------------------------------------------------+   |
@@ -103,7 +103,7 @@ To keep the repository feather-light (~40 MB), only English (`eng`) is pre-insta
    - **Never** launch, focus, or hijack the user's personal host OS browsers (Brave, Google Chrome, Firefox) or disturb their personal tabs/sessions unless the user explicitly commands you to inspect a specific host browser window.
 2. **Zero-Disk-Write & Localhost Privacy:**
    - Do not write temporary screenshot `.png` files to `/tmp` or the project directory during live screen inspection; rely on `screenshot_and_ocr`'s in-memory pipe.
-   - `AxiomVision` binds strictly to `127.0.0.1:39200`. Never expose the MCP port to external network interfaces.
+   - `ShellMind Vision` binds strictly to `127.0.0.1:39200`. Never expose the MCP port to external network interfaces.
 3. **No Root / System Modification:**
    - Never run `sudo` or modify system files outside the user's authorized workspace.
 

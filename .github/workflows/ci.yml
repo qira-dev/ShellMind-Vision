@@ -1,4 +1,4 @@
-name: AxiomVision CI
+name: ShellMind Vision CI
 
 on:
   push:

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * AxiomVision — Universal AI Desktop Automation Engine
+ * ShellMind Vision — Universal AI Desktop Automation Engine
  * HTTP / Streamable-HTTP / SSE Daemon on Port 39200
  */
 import http from 'node:http';
@@ -8,8 +8,8 @@ import { URL } from 'node:url';
 import crypto from 'node:crypto';
 import { CulMcpBridge } from './lib/bridge.mjs';
 
-const PORT = Number(process.env.AXIOM_VISION_PORT || process.env.DESKTOP_UI_MCP_PORT) || 39200;
-const HOST = process.env.AXIOM_VISION_HOST || process.env.DESKTOP_UI_MCP_HOST || '127.0.0.1';
+const PORT = Number(process.env.SHELLMIND_VISION_PORT || process.env.DESKTOP_UI_MCP_PORT) || 39200;
+const HOST = process.env.SHELLMIND_VISION_HOST || process.env.DESKTOP_UI_MCP_HOST || '127.0.0.1';
 
 const bridge = new CulMcpBridge();
 const sseSessions = new Map();
@@ -66,7 +66,7 @@ const server = http.createServer(async (req, res) => {
       const tools = await bridge.listTools();
       return sendJson(res, 200, {
         ok: true,
-        service: 'AxiomVision',
+        service: 'ShellMind Vision',
         description: 'Universal Zero-Hallucination Desktop Automation Engine',
         version: '1.0.0',
         host: HOST,
@@ -133,7 +133,7 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(202, corsHeaders());
           return res.end();
         }
-        const sid = req.headers['mcp-session-id'] || 's_axiom_vision';
+        const sid = req.headers['mcp-session-id'] || 's_shellmind_vision';
         const proto = req.headers['mcp-protocol-version'] || '2024-11-05';
         return sendJson(res, 200, reply, {
           'Mcp-Session-Id': sid,
@@ -163,5 +163,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`[AxiomVision] Listening on http://${HOST}:${PORT}/mcp (and /sse, /health)`);
+  console.log(`[ShellMind Vision] Listening on http://${HOST}:${PORT}/mcp (and /sse, /health)`);
 });

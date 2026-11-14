@@ -1,19 +1,19 @@
 {
-  "name": "axiom-vision",
+  "name": "shellmind-vision",
   "version": "1.0.0",
   "description": "Universal Zero-Hallucination Desktop Automation Engine & MCP Plugin for AI Agents",
   "main": "server.mjs",
   "type": "module",
   "bin": {
-    "axiomvision": "./axiomvision"
+    "shellmind-vision": "./shellmind-vision"
   },
   "scripts": {
     "start": "node server.mjs",
     "stdio": "node mcp-stdio.mjs",
-    "up": "./axiomvision up",
-    "down": "./axiomvision down",
-    "status": "./axiomvision status",
-    "doctor": "./axiomvision doctor",
+    "up": "./shellmind-vision up",
+    "down": "./shellmind-vision down",
+    "status": "./shellmind-vision status",
+    "doctor": "./shellmind-vision doctor",
     "test": "node mcp-stdio.mjs"
   },
   "keywords": [
@@ -34,7 +34,7 @@
   "author": "qira-dev",
   "repository": {
     "type": "git",
-    "url": "https://github.com/qira-dev/AxiomVision.git"
+    "url": "https://github.com/qira-dev/ShellMind-Vision.git"
   },
   "license": "MIT",
   "engines": {

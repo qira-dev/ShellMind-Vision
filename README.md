@@ -1,4 +1,4 @@
-# AxiomVision
+# ShellMind Vision
 
 **Deterministic OS-Level Vision, Sub-Pixel OCR, and Accessibility Automation Engine for AI Agents**
 
@@ -6,15 +6,15 @@
 [![Platform: Linux Wayland & X11](https://img.shields.io/badge/Platform-Linux%20Wayland%20%26%20X11-1f2328.svg)](#)
 [![Core: Rust + C++ AVX2](https://img.shields.io/badge/Engine-Rust%20%2B%20C%2B%2B%20AVX2-0969da.svg)](#)
 
-AxiomVision replaces probabilistic Vision LLM coordinate guessing with deterministic OS introspection and sub-pixel optical extraction. Built in Rust and C++ (AVX2 SIMD), it processes frames entirely in RAM (zero temporary disk writes), sharpens small 9-10px terminal and UI fonts via a 3x3 Laplacian Unsharp Mask, and fuses optical bounding boxes with live OS accessibility tree (`AT-SPI2`) ground-truth strings.
+ShellMind Vision replaces probabilistic Vision LLM coordinate guessing with deterministic OS introspection and sub-pixel optical extraction. Built in Rust and C++ (AVX2 SIMD), it processes frames entirely in RAM (zero temporary disk writes), sharpens small 9-10px terminal and UI fonts via a 3x3 Laplacian Unsharp Mask, and fuses optical bounding boxes with live OS accessibility tree (`AT-SPI2`) ground-truth strings.
 
 ---
 
-## Empirical Benchmark: AxiomVision vs. Frontier Vision LLMs
+## Empirical Benchmark: ShellMind Vision vs. Frontier Vision LLMs
 
-![AxiomVision vs Frontier Vision LLMs Benchmark](assets/benchmark.svg)
+![ShellMind Vision vs Frontier Vision LLMs Benchmark](assets/benchmark.svg)
 
-| Evaluated Model | AxiomVision (%) | Model Vision (%) | Delta | Key Technical Finding |
+| Evaluated Model | ShellMind Vision (%) | Model Vision (%) | Delta | Key Technical Finding |
 | :--- | :---: | :---: | :---: | :--- |
 | **OpenAI GPT-4o (Astra)** | **90.0%** | 10.0% | **+80.0%** | Rated deterministic OS extraction 90% vs. 10% for standalone visual analysis on dense multi-window desktop captures. |
 | **Anthropic Claude 3.5 Sonnet** | **90.0%** | 50.0% | **+40.0%** | Conceded that native model vision cannot measure button coordinates and relies on spatial estimation. |
@@ -29,10 +29,10 @@ Full technical specification and sub-system plots: [`benchmark.html`](benchmark.
 
 ## Single-Command Installation
 
-Install and start the self-contained AxiomVision daemon on Ubuntu/Debian (bundles portable runtime automatically if Node.js is absent; requires zero root privileges):
+Install and start the self-contained ShellMind Vision daemon on Ubuntu/Debian (bundles portable runtime automatically if Node.js is absent; requires zero root privileges):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/qira-dev/AxiomVision/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/qira-dev/ShellMind-Vision/main/install.sh | bash
 ```
 
 ---
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/qira-dev/AxiomVision/main/install.s
 
 ```
 +---------------------------------------------------------------------------------+
-|                              AXIOMVISION ARCHITECTURE                           |
+|                              SHELLMIND VISION ARCHITECTURE                           |
 +---------------------------------------------------------------------------------+
 |                                                                                 |
 |  [CLIENT AGENT] (Antigravity / ZCode / Cursor / Claude Code / Custom Agent)     |
@@ -88,12 +88,12 @@ curl -fsSL https://raw.githubusercontent.com/qira-dev/AxiomVision/main/install.s
 ## CLI Usage
 
 ```bash
-axiomvision up                 # Start background daemon on port 39200
-axiomvision status             # Check daemon PID, CPU, and RSS memory
-axiomvision doctor             # Run Wayland, Portal, and AT-SPI2 diagnostics
-axiomvision logs               # Inspect daemon logs
-axiomvision stop               # Stop background daemon
-axiomvision restart            # Restart daemon
+shellmind-vision up                 # Start background daemon on port 39200
+shellmind-vision status             # Check daemon PID, CPU, and RSS memory
+shellmind-vision doctor             # Run Wayland, Portal, and AT-SPI2 diagnostics
+shellmind-vision logs               # Inspect daemon logs
+shellmind-vision stop               # Stop background daemon
+shellmind-vision restart            # Restart daemon
 ```
 
 ### Just-In-Time Language Provisioning (123+ Languages)
@@ -101,10 +101,10 @@ axiomvision restart            # Restart daemon
 By default, only English (`eng`) is pre-installed to keep the repository lightweight (~40 MB). Any of the 123+ quantized language models can be fetched on demand in under 1 second via CLI or MCP (`ensure_language`):
 
 ```bash
-axiomvision lang list          # List installed OCR language models
-axiomvision lang add ben       # Install Bengali model (~855 KB)
-axiomvision lang add jpn       # Install Japanese model (~2.4 MB)
-axiomvision lang add all       # Install all 123 language models
+shellmind-vision lang list          # List installed OCR language models
+shellmind-vision lang add ben       # Install Bengali model (~855 KB)
+shellmind-vision lang add jpn       # Install Japanese model (~2.4 MB)
+shellmind-vision lang add all       # Install all 123 language models
 ```
 
 ---
@@ -116,9 +116,9 @@ axiomvision lang add all       # Install all 123 language models
 ```json
 {
   "mcpServers": {
-    "axiom-vision": {
+    "shellmind-vision": {
       "command": "node",
-      "args": ["~/.local/share/axiom-vision/mcp-stdio.mjs"]
+      "args": ["~/.local/share/shellmind-vision/mcp-stdio.mjs"]
     }
   }
 }
@@ -150,7 +150,7 @@ axiomvision lang add all       # Install all 123 language models
 ## Agent Governance & Operational Specification
 
 See [`RULE.md`](RULE.md) and [`SKILL.md`](SKILL.md) for the complete operational rulebook:
-- **Rule 1:** Zero Vision LLM Hallucination (mandatory deterministic coordinate and text extraction via `AxiomVision`).
+- **Rule 1:** Zero Vision LLM Hallucination (mandatory deterministic coordinate and text extraction via `ShellMind Vision`).
 - **Rule 2:** Gate 0 Just-In-Time Language Onboarding (on-demand provisioning across 123+ languages via `ensure_language`).
 - **Rule 3:** Deterministic Tool Routing Hierarchy (`launch_app`, `screenshot_and_ocr`, `inspect_image_ocr`, `inspect_svg`, `deep_atspi_tree`, `atspi_invoke_node`).
 - **Rule 4:** Strict Browser Isolation, Zero-Disk-Write RAM Pipeline, and Localhost Privacy.
