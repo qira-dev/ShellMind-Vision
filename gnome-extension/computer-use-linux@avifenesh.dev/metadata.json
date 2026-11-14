@@ -4,8 +4,7 @@
   "description": "Local GNOME Shell window control and agent activity indicator for Linux Computer Use MCP.",
   "url": "https://github.com/agent-sh/computer-use-linux",
   "session-modes": [
-    "user",
-    "unlock-dialog"
+    "user"
   ],
   "shell-version": [
     "45",

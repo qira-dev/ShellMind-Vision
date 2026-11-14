@@ -24,7 +24,8 @@ if [[ "${OS}" != "Linux" ]]; then
 fi
 
 if [[ "${ARCH}" != "x86_64" ]]; then
-    echo -e "${YELLOW}[!] Warning: System architecture is ${ARCH}. Pre-built binaries target x86_64.${NC}"
+    echo -e "${RED}[!] Error: Pre-built binaries target Linux x86_64 (detected: ${ARCH}).${NC}"
+    exit 1
 fi
 
 INSTALL_DIR="${HOME}/.local/share/shellmind-vision"
@@ -60,14 +61,15 @@ fi
 if [[ "${NEED_NODE}" -eq 1 && ! -x "${TARGET_DIR}/runtime/node/bin/node" ]]; then
     echo -e "${BLUE}[*] Bundling self-contained portable Node.js v22 runtime (zero sudo required)...${NC}"
     mkdir -p "${TARGET_DIR}/runtime"
-    NODE_TAR="/tmp/shellmind-vision-node-v22.tar.xz"
-    python3 -c '
-import urllib.request
-urllib.request.urlretrieve("https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.xz", "/tmp/shellmind-vision-node-v22.tar.xz")
-'
-    tar -xJf "${NODE_TAR}" -C "${TARGET_DIR}/runtime"
-    mv "${TARGET_DIR}/runtime/node-v22.14.0-linux-x64" "${TARGET_DIR}/runtime/node"
-    rm -f "${NODE_TAR}"
+    TMP_NODE_DIR="$(mktemp -d)"
+    NODE_VER="v22.14.0"
+    NODE_ARCHIVE="node-${NODE_VER}-linux-x64.tar.xz"
+    curl -fsSL "https://nodejs.org/dist/${NODE_VER}/${NODE_ARCHIVE}" -o "${TMP_NODE_DIR}/${NODE_ARCHIVE}"
+    curl -fsSL "https://nodejs.org/dist/${NODE_VER}/SHASUMS256.txt" -o "${TMP_NODE_DIR}/SHASUMS256.txt"
+    (cd "${TMP_NODE_DIR}" && grep " ${NODE_ARCHIVE}\$" SHASUMS256.txt | sha256sum -c -)
+    tar -xJf "${TMP_NODE_DIR}/${NODE_ARCHIVE}" -C "${TARGET_DIR}/runtime"
+    mv "${TARGET_DIR}/runtime/node-${NODE_VER}-linux-x64" "${TARGET_DIR}/runtime/node"
+    rm -rf "${TMP_NODE_DIR}"
 fi
 
 export PATH="${TARGET_DIR}/runtime/node/bin:${BIN_DIR}:${PATH}"

@@ -8,7 +8,7 @@ on:
 
 jobs:
   validate:
-    name: Syntax & Cargo Validation
+    name: Syntax, Rust Engine & MCP Smoke Validation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -19,16 +19,26 @@ jobs:
         with:
           node-version: 22
 
-      - name: Validate JavaScript Syntax
+      - name: Validate JavaScript & Shell Syntax
         run: |
           node --check server.mjs
           node --check mcp-stdio.mjs
           node --check lib/bridge.mjs
+          bash -n shellmind-vision
+          bash -n install.sh
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Verify desktop-vision-rs Rust Crate
+      - name: Verify desktop-vision-rs Rust Crate & Unit Tests
         run: |
           cd src/desktop-vision-rs
-          cargo check --verbose
+          cargo fmt --all -- --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: End-to-End MCP Stdio & SVG Smoke Test
+        run: |
+          printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"inspect_svg","arguments":{"file_path_or_xml":"<svg viewBox=\\"0 0 120 40\\"><defs id=\\"d1\\"/><rect x=\\"10\\" y=\\"10\\" width=\\"20\\" height=\\"10\\"/><text x=\\"10\\" y=\\"25\\">ShellMind</text></svg>"}}}\n' | node mcp-stdio.mjs | node -e "const fs=require('fs');const lines=fs.readFileSync(0,'utf8').trim().split('\n').map(JSON.parse);const byId=Object.fromEntries(lines.map(l=>[l.id,l]));if(byId[1].result.serverInfo.name!=='ShellMind Vision')process.exit(1);const svg=JSON.parse(byId[2].result.content[0].text);if(!svg.ok||svg.texts.length!==1||svg.elements.length!==1)process.exit(1);console.log('CI_MCP_SMOKE_OK');"
