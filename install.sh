@@ -35,7 +35,7 @@ EXT_DIR="${HOME}/.local/share/gnome-shell/extensions/computer-use-linux@avifenes
 mkdir -p "${INSTALL_DIR}" "${BIN_DIR}" "${HOME}/.local/share/gnome-shell/extensions"
 
 # Check if running locally inside the repo
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || echo "")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-}")" 2>/dev/null && pwd || echo "")"
 if [[ -n "${SCRIPT_DIR}" && -f "${SCRIPT_DIR}/server.mjs" && -f "${SCRIPT_DIR}/shellmind-vision" ]]; then
     echo -e "${BLUE}[*] Installing from local source: ${SCRIPT_DIR}...${NC}"
     TARGET_DIR="${SCRIPT_DIR}"
@@ -72,6 +72,7 @@ if [[ "${NEED_NODE}" -eq 1 && ! -x "${TARGET_DIR}/runtime/node/bin/node" ]]; the
     rm -rf "${TMP_NODE_DIR}"
 fi
 
+ORIG_PATH="${PATH}"
 export PATH="${TARGET_DIR}/runtime/node/bin:${BIN_DIR}:${PATH}"
 
 # 2. Install & verify GNOME Shell Extension
@@ -92,7 +93,7 @@ chmod +x "${TARGET_DIR}/shellmind-vision" "${TARGET_DIR}/server.mjs" "${TARGET_D
 ln -sf "${TARGET_DIR}/shellmind-vision" "${BIN_DIR}/shellmind-vision"
 
 # Ensure ~/.local/bin is in PATH
-if [[ ":${PATH}:" != *":${BIN_DIR}:"* ]]; then
+if [[ ":${ORIG_PATH}:" != *":${BIN_DIR}:"* ]]; then
     SHELL_RC="${HOME}/.bashrc"
     [[ "${SHELL:-}" == *"zsh"* ]] && SHELL_RC="${HOME}/.zshrc"
     if ! grep -q '.local/bin' "${SHELL_RC}" 2>/dev/null; then

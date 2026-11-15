@@ -94,42 +94,62 @@ def _get_text(obj):
     return None
 
 
+def _init_atspi_timeout():
+    if hasattr(Atspi, "set_timeout"):
+        try:
+            Atspi.set_timeout(500, 1500)
+        except Exception:
+            pass
+
+
 def list_windows():
+    _init_atspi_timeout()
     desktop = Atspi.get_desktop(0)
     windows = []
     wid = 1
-    for i in range(desktop.get_child_count()):
-        app = desktop.get_child_at_index(i)
-        if not app:
-            continue
-        app_name = app.get_name() or ""
+    try:
+        app_count = desktop.get_child_count()
+    except Exception:
+        app_count = 0
+    for i in range(app_count):
         try:
-            pid = app.get_process_id()
+            app = desktop.get_child_at_index(i)
+            if not app:
+                continue
+            app_name = app.get_name() or ""
+            try:
+                pid = app.get_process_id()
+            except Exception:
+                pid = None
+            win_count = app.get_child_count()
         except Exception:
-            pid = None
-        for j in range(app.get_child_count()):
-            win = app.get_child_at_index(j)
-            if not win:
+            continue
+        for j in range(win_count):
+            try:
+                win = app.get_child_at_index(j)
+                if not win:
+                    continue
+                title = win.get_name() or ""
+                role = win.get_role_name() or ""
+                states = _get_states(win)
+                bounds = _get_bounds(win)
+                if not title and role in ("filler", "popup menu") and (not bounds or bounds["width"] == 0):
+                    continue
+                windows.append({
+                    "window_id": wid,
+                    "app_index": i,
+                    "win_index": j,
+                    "app_name": app_name,
+                    "pid": pid,
+                    "title": title,
+                    "role": role,
+                    "focused": ("active" in states or "focused" in states),
+                    "states": states,
+                    "bounds": bounds,
+                })
+                wid += 1
+            except Exception:
                 continue
-            title = win.get_name() or ""
-            role = win.get_role_name() or ""
-            states = _get_states(win)
-            bounds = _get_bounds(win)
-            if not title and role in ("filler", "popup menu") and (not bounds or bounds["width"] == 0):
-                continue
-            windows.append({
-                "window_id": wid,
-                "app_index": i,
-                "win_index": j,
-                "app_name": app_name,
-                "pid": pid,
-                "title": title,
-                "role": role,
-                "focused": ("active" in states or "focused" in states),
-                "states": states,
-                "bounds": bounds,
-            })
-            wid += 1
     return {
         "ok": True,
         "backend": "atspi2-direct",
@@ -140,7 +160,9 @@ def list_windows():
 
 def focused_window():
     res = list_windows()
-    focused = [w for w in res["windows"] if w["focused"] and w["role"] != "window"]
+    focused = [w for w in res["windows"] if w["focused"] and w["role"] in ("frame", "window", "dialog")]
+    if not focused:
+        focused = [w for w in res["windows"] if w["focused"] and w["role"] != "window"]
     if not focused:
         focused = [w for w in res["windows"] if w["focused"]]
     return {
@@ -155,11 +177,7 @@ def walk_app_tree(app_query="", max_depth=28, max_nodes=400, interactive_only=Fa
     import time
     max_depth = max(1, min(int(max_depth or 28), 64))
     max_nodes = max(1, min(int(max_nodes or 400), 2000))
-    if hasattr(Atspi, "set_timeout"):
-        try:
-            Atspi.set_timeout(500, 2000)
-        except Exception:
-            pass
+    _init_atspi_timeout()
     deadline = time.monotonic() + 15.0
     timed_out = False
     desktop = Atspi.get_desktop(0)
@@ -238,7 +256,9 @@ def walk_app_tree(app_query="", max_depth=28, max_nodes=400, interactive_only=Fa
         except Exception:
             cnt = 0
         for c_idx in range(min(cnt, 150)):
-            if len(nodes) >= max_nodes:
+            if len(nodes) >= max_nodes or time.monotonic() >= deadline:
+                if time.monotonic() >= deadline:
+                    timed_out = True
                 break
             try:
                 child = obj.get_child_at_index(c_idx)
@@ -248,33 +268,49 @@ def walk_app_tree(app_query="", max_depth=28, max_nodes=400, interactive_only=Fa
                 walk(child, f"{path_str}/{c_idx}", depth + 1)
 
     matched_apps = []
-    for i in range(desktop.get_child_count()):
-        app = desktop.get_child_at_index(i)
-        if not app:
-            continue
-        aname = app.get_name() or ""
-        if q and q not in aname.lower():
-            title_match = False
-            for j in range(app.get_child_count()):
-                w = app.get_child_at_index(j)
-                if w and q in (w.get_name() or "").lower():
-                    title_match = True
-                    break
-            if not title_match:
+    try:
+        app_count = desktop.get_child_count()
+    except Exception:
+        app_count = 0
+    for i in range(app_count):
+        if time.monotonic() >= deadline:
+            timed_out = True
+            break
+        try:
+            app = desktop.get_child_at_index(i)
+            if not app:
                 continue
-        matched_apps.append(aname)
-        walk(app, str(i), 0)
+            aname = app.get_name() or ""
+            if q and q not in aname.lower():
+                title_match = False
+                for j in range(app.get_child_count()):
+                    if time.monotonic() >= deadline:
+                        timed_out = True
+                        break
+                    w = app.get_child_at_index(j)
+                    if w and q in (w.get_name() or "").lower():
+                        title_match = True
+                        break
+                if not title_match:
+                    continue
+            matched_apps.append(aname)
+            walk(app, str(i), 0)
+        except Exception:
+            continue
 
     return {
         "ok": True,
         "query": app_query,
         "matched_apps": matched_apps,
+        "timed_out": timed_out,
+        "truncated": timed_out or len(nodes) >= max_nodes,
         "node_count": len(nodes),
         "nodes": nodes,
     }
 
 
-def invoke_node(node_path, action_index=0, set_text=None, grab_focus=True):
+def invoke_node(node_path, action_index=0, set_text=None, grab_focus=True, expect_name=None, expect_role=None):
+    _init_atspi_timeout()
     desktop = Atspi.get_desktop(0)
     raw_parts = [p.strip() for p in str(node_path).strip("/").split("/") if p.strip() != ""]
     if not raw_parts or not all(p.isdigit() for p in raw_parts):
@@ -283,15 +319,39 @@ def invoke_node(node_path, action_index=0, set_text=None, grab_focus=True):
 
     curr = desktop
     for idx in parts:
-        curr = curr.get_child_at_index(idx)
+        try:
+            curr = curr.get_child_at_index(idx)
+        except Exception as e:
+            return {"ok": False, "error": f"AT-SPI error traversing path {node_path} at {idx}: {e}"}
         if not curr:
             return {"ok": False, "error": f"Element not found at path {node_path} (stopped at {idx})"}
+
+    try:
+        actual_name = (curr.get_name() or "").replace("\ufffc", "").strip()
+        actual_role = curr.get_role_name() or ""
+    except Exception as e:
+        return {"ok": False, "error": f"Failed to read node identity at {node_path}: {e}"}
+
+    if expect_name is not None and actual_name != str(expect_name).strip():
+        return {
+            "ok": False,
+            "error": f"Stale node_path {node_path}: expected name '{expect_name}', got '{actual_name}'",
+            "actual_name": actual_name,
+            "actual_role": actual_role,
+        }
+    if expect_role is not None and actual_role != str(expect_role).strip():
+        return {
+            "ok": False,
+            "error": f"Stale node_path {node_path}: expected role '{expect_role}', got '{actual_role}'",
+            "actual_name": actual_name,
+            "actual_role": actual_role,
+        }
 
     results = {
         "ok": True,
         "node_path": node_path,
-        "name": curr.get_name() or "",
-        "role": curr.get_role_name() or "",
+        "name": actual_name,
+        "role": actual_role,
     }
 
     if grab_focus:
@@ -347,6 +407,8 @@ def main():
             action_index=int(arg_json.get("action_index", 0)),
             set_text=arg_json.get("set_text"),
             grab_focus=bool(arg_json.get("grab_focus", True)),
+            expect_name=arg_json.get("expect_name"),
+            expect_role=arg_json.get("expect_role"),
         )
     else:
         out = {"ok": False, "error": f"Unknown command: {cmd}"}

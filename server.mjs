@@ -27,11 +27,11 @@ try {
 if (!AUTH_TOKEN || AUTH_TOKEN.length < 32) {
   AUTH_TOKEN = crypto.randomBytes(32).toString('hex');
   fs.writeFileSync(TOKEN_FILE, AUTH_TOKEN + '\n', { mode: 0o600 });
-} else {
-  try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
 }
+try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
 
 const ALLOWED_HOSTS = new Set([
+  `${HOST}:${PORT}`,
   `127.0.0.1:${PORT}`,
   `localhost:${PORT}`,
   `[::1]:${PORT}`,
@@ -91,20 +91,34 @@ function guardRequest(req, res, requireAuth = true) {
 function readBody(req, limit = 16 * 1024 * 1024) {
   return new Promise((resolve, rejectErr) => {
     let total = 0;
+    let done = false;
     const chunks = [];
-    req.on('data', (c) => {
+    const onData = (c) => {
+      if (done) return;
       total += c.length;
       if (total > limit) {
+        done = true;
+        req.removeListener('data', onData);
         const err = new Error('Request body too large');
         err.statusCode = 413;
         rejectErr(err);
-        req.resume();
         return;
       }
       chunks.push(c);
+    };
+    req.on('data', onData);
+    req.on('end', () => {
+      if (!done) {
+        done = true;
+        resolve(Buffer.concat(chunks).toString('utf8'));
+      }
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    req.on('error', rejectErr);
+    req.on('error', (err) => {
+      if (!done) {
+        done = true;
+        rejectErr(err);
+      }
+    });
   });
 }
 
@@ -234,7 +248,11 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 404, { error: 'Not found', path: url.pathname });
   } catch (err) {
     const code = err?.statusCode || 500;
-    return sendJson(res, code, { error: err?.message || String(err) });
+    sendJson(res, code, { error: err?.message || String(err) }, code === 413 ? { Connection: 'close' } : {});
+    if (code === 413) {
+      res.once('finish', () => req.destroy());
+    }
+    return;
   }
 });
 

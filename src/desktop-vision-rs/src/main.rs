@@ -215,17 +215,47 @@ fn extract_attr(tag_str: &str, attr_name: &str) -> Option<String> {
 
 fn decode_xml_entities(input: &str) -> String {
     let mut s = input.to_string();
-    if let Some(cdata_start) = s.find("<![CDATA[")
-        && let Some(cdata_end) = s[cdata_start + 9..].find("]]>")
-    {
-        let inner = s[cdata_start + 9..cdata_start + 9 + cdata_end].to_string();
-        s.replace_range(cdata_start..cdata_start + 9 + cdata_end + 3, &inner);
+    while let Some(cdata_start) = s.find("<![CDATA[") {
+        if let Some(cdata_end) = s[cdata_start + 9..].find("]]>") {
+            let inner = s[cdata_start + 9..cdata_start + 9 + cdata_end].to_string();
+            s.replace_range(cdata_start..cdata_start + 9 + cdata_end + 3, &inner);
+        } else {
+            break;
+        }
     }
-    s.replace("&quot;", "\"")
+    let named = s
+        .replace("&quot;", "\"")
         .replace("&apos;", "'")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
-        .replace("&amp;", "&")
+        .replace("&amp;", "&");
+    if !named.contains("&#") {
+        return named;
+    }
+    let mut out = String::with_capacity(named.len());
+    let mut rest = named.as_str();
+    while let Some(pos) = rest.find("&#") {
+        out.push_str(&rest[..pos]);
+        let after = &rest[pos + 2..];
+        if let Some(semi) = after.find(';') {
+            let token = &after[..semi];
+            let code =
+                if let Some(hex) = token.strip_prefix('x').or_else(|| token.strip_prefix('X')) {
+                    u32::from_str_radix(hex, 16).ok()
+                } else {
+                    token.parse::<u32>().ok()
+                };
+            if let Some(ch) = code.and_then(char::from_u32) {
+                out.push(ch);
+                rest = &after[semi + 1..];
+                continue;
+            }
+        }
+        out.push_str("&#");
+        rest = after;
+    }
+    out.push_str(rest);
+    out
 }
 
 fn parse_f64(s: Option<String>) -> f64 {
@@ -380,6 +410,64 @@ fn parse_svg_transform(raw: Option<String>) -> Affine2D {
                     b: 0.0,
                     c: 0.0,
                     d: sy,
+                    e: 0.0,
+                    f: 0.0,
+                }
+            }
+            "rotate" => {
+                let deg = args.first().copied().unwrap_or(0.0);
+                let rad = deg.to_radians();
+                let (sin_a, cos_a) = rad.sin_cos();
+                let rot = Affine2D {
+                    a: cos_a,
+                    b: sin_a,
+                    c: -sin_a,
+                    d: cos_a,
+                    e: 0.0,
+                    f: 0.0,
+                };
+                if args.len() >= 3 {
+                    let cx = args[1];
+                    let cy = args[2];
+                    let t1 = Affine2D {
+                        a: 1.0,
+                        b: 0.0,
+                        c: 0.0,
+                        d: 1.0,
+                        e: cx,
+                        f: cy,
+                    };
+                    let t2 = Affine2D {
+                        a: 1.0,
+                        b: 0.0,
+                        c: 0.0,
+                        d: 1.0,
+                        e: -cx,
+                        f: -cy,
+                    };
+                    t1.multiply(rot).multiply(t2)
+                } else {
+                    rot
+                }
+            }
+            "skewx" => {
+                let deg = args.first().copied().unwrap_or(0.0);
+                Affine2D {
+                    a: 1.0,
+                    b: 0.0,
+                    c: deg.to_radians().tan(),
+                    d: 1.0,
+                    e: 0.0,
+                    f: 0.0,
+                }
+            }
+            "skewy" => {
+                let deg = args.first().copied().unwrap_or(0.0);
+                Affine2D {
+                    a: 1.0,
+                    b: deg.to_radians().tan(),
+                    c: 0.0,
+                    d: 1.0,
                     e: 0.0,
                     f: 0.0,
                 }
@@ -683,7 +771,27 @@ fn strip_xml_tags(s: &str) -> String {
     let mut out = String::new();
     let mut in_tag = false;
     let mut last_was_space = false;
-    for ch in s.chars() {
+    let mut i = 0;
+    let n = s.len();
+    while i < n {
+        if !in_tag
+            && s[i..].starts_with("<![CDATA[")
+            && let Some(end_rel) = s[i + 9..].find("]]>")
+        {
+            let inner = &s[i + 9..i + 9 + end_rel];
+            out.push_str(inner);
+            last_was_space = inner
+                .chars()
+                .last()
+                .map(|c| c.is_whitespace())
+                .unwrap_or(last_was_space);
+            i += 9 + end_rel + 3;
+            continue;
+        }
+        let Some(ch) = s[i..].chars().next() else {
+            break;
+        };
+        i += ch.len_utf8();
         if ch == '<' {
             if !in_tag && !out.is_empty() && !last_was_space {
                 out.push(' ');
@@ -700,15 +808,141 @@ fn strip_xml_tags(s: &str) -> String {
     decode_xml_entities(out.trim())
 }
 
+fn find_matching_close(xml: &str, tag_name_lower: &str) -> Option<(usize, usize)> {
+    let mut depth: usize = 1;
+    let mut scan = 0;
+    let n = xml.len();
+    while scan < n {
+        let Some(lt_rel) = xml[scan..].find('<') else {
+            break;
+        };
+        let lt = scan + lt_rel;
+        if xml[lt..].starts_with("<!--") {
+            if let Some(end_c) = xml[lt + 4..].find("-->") {
+                scan = lt + 4 + end_c + 3;
+                continue;
+            } else {
+                break;
+            }
+        }
+        if xml[lt..].starts_with("<![CDATA[") {
+            if let Some(end_cd) = xml[lt + 9..].find("]]>") {
+                scan = lt + 9 + end_cd + 3;
+                continue;
+            } else {
+                break;
+            }
+        }
+        let Some(gt_rel) = find_tag_end_quoted(&xml[lt..]) else {
+            break;
+        };
+        let gt = lt + gt_rel;
+        let hdr = xml[lt + 1..gt].trim();
+        scan = gt + 1;
+        if let Some(stripped) = hdr.strip_prefix('/') {
+            let cname = stripped
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .rsplit(':')
+                .next()
+                .unwrap_or("")
+                .to_lowercase();
+            if cname == tag_name_lower {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some((lt, gt + 1));
+                }
+            }
+        } else if !hdr.ends_with('/') && !hdr.starts_with('!') && !hdr.starts_with('?') {
+            let oname = hdr
+                .split(|c: char| c.is_whitespace() || c == '/')
+                .next()
+                .unwrap_or("")
+                .rsplit(':')
+                .next()
+                .unwrap_or("")
+                .to_lowercase();
+            if oname == tag_name_lower {
+                depth += 1;
+            }
+        }
+    }
+    None
+}
+
+fn strip_child_tspans(xml: &str) -> String {
+    let mut out = String::new();
+    let mut scan = 0;
+    let n = xml.len();
+    while scan < n {
+        let Some(lt_rel) = xml[scan..].find('<') else {
+            out.push_str(&xml[scan..]);
+            break;
+        };
+        let lt = scan + lt_rel;
+        out.push_str(&xml[scan..lt]);
+        if xml[lt..].starts_with("<!--")
+            && let Some(end_c) = xml[lt + 4..].find("-->")
+        {
+            scan = lt + 4 + end_c + 3;
+            continue;
+        }
+        if xml[lt..].starts_with("<![CDATA[")
+            && let Some(end_cd) = xml[lt + 9..].find("]]>")
+        {
+            out.push_str(&xml[lt..lt + 9 + end_cd + 3]);
+            scan = lt + 9 + end_cd + 3;
+            continue;
+        }
+        let Some(gt_rel) = find_tag_end_quoted(&xml[lt..]) else {
+            out.push_str(&xml[lt..]);
+            break;
+        };
+        let gt = lt + gt_rel;
+        let hdr = xml[lt + 1..gt].trim();
+        let oname = hdr
+            .split(|c: char| c.is_whitespace() || c == '/')
+            .next()
+            .unwrap_or("")
+            .rsplit(':')
+            .next()
+            .unwrap_or("")
+            .to_lowercase();
+        if oname == "tspan" {
+            if hdr.ends_with('/') {
+                scan = gt + 1;
+            } else if let Some((_, close_end)) = find_matching_close(&xml[gt + 1..], "tspan") {
+                scan = gt + 1 + close_end;
+            } else {
+                scan = gt + 1;
+            }
+        } else {
+            out.push_str(&xml[lt..=gt]);
+            scan = gt + 1;
+        }
+    }
+    out
+}
+
 pub fn inspect_svg(file_path_or_xml: &str, include_paths: bool, max_elements: usize) -> Value {
     let trimmed = file_path_or_xml.trim_start();
     let (raw_xml, source_label) = if trimmed == "-" || trimmed == "stdin" {
         let mut buf = String::new();
-        if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
+        if let Err(e) = std::io::stdin()
+            .take(MAX_SVG_FILE_BYTES + 1)
+            .read_to_string(&mut buf)
+        {
             return json!({ "ok": false, "error": format!("Failed to read SVG from stdin: {}", e) });
+        }
+        if (buf.len() as u64) > MAX_SVG_FILE_BYTES {
+            return json!({ "ok": false, "error": "Refusing oversized SVG from stdin (>32 MiB)" });
         }
         (buf, "<stdin_svg>".to_string())
     } else if trimmed.starts_with('<') {
+        if (trimmed.len() as u64) > MAX_SVG_FILE_BYTES {
+            return json!({ "ok": false, "error": "Refusing oversized inline SVG (>32 MiB)" });
+        }
         (trimmed.to_string(), "<inline_svg>".to_string())
     } else {
         let p = Path::new(file_path_or_xml);
@@ -830,7 +1064,7 @@ pub fn inspect_svg(file_path_or_xml: &str, include_paths: bool, max_elements: us
         let local_tf = parse_svg_transform(extract_attr(tag_trimmed, "transform"));
         let combined_tf = cur_tf.multiply(local_tf);
 
-        if !is_self_closing && matches!(tag_name.as_str(), "g" | "svg" | "a") {
+        if !is_self_closing && matches!(tag_name.as_str(), "g" | "svg" | "a" | "text") {
             tf_stack.push((tag_name.clone(), combined_tf));
         }
 
@@ -859,10 +1093,25 @@ pub fn inspect_svg(file_path_or_xml: &str, include_paths: bool, max_elements: us
         ) {
             if let Some(id) = extract_attr(tag_trimmed, "id") {
                 defs_ids.push(format!("{}#{}", tag_name, id));
-                let w = parse_f64(extract_attr(tag_trimmed, "width"));
-                let h = parse_f64(extract_attr(tag_trimmed, "height"));
+                let mut x = parse_f64(extract_attr(tag_trimmed, "x"));
+                let mut y = parse_f64(extract_attr(tag_trimmed, "y"));
+                let mut w = parse_f64(extract_attr(tag_trimmed, "width"));
+                let mut h = parse_f64(extract_attr(tag_trimmed, "height"));
+                if w == 0.0
+                    && h == 0.0
+                    && let Some(vb) = extract_attr(tag_trimmed, "viewBox")
+                        .or_else(|| extract_attr(tag_trimmed, "viewbox"))
+                {
+                    let nums = parse_numbers_list(&vb);
+                    if nums.len() >= 4 {
+                        x = nums[0];
+                        y = nums[1];
+                        w = nums[2];
+                        h = nums[3];
+                    }
+                }
                 if w > 0.0 || h > 0.0 {
-                    defs_bboxes.insert(id, (0.0, 0.0, w, h));
+                    defs_bboxes.insert(id, (x, y, w, h));
                 }
             }
             if !is_self_closing {
@@ -874,10 +1123,40 @@ pub fn inspect_svg(file_path_or_xml: &str, include_paths: bool, max_elements: us
         if skip_depth > 0 {
             if let Some(id) = extract_attr(tag_trimmed, "id") {
                 defs_ids.push(format!("{}#{}", tag_name, id));
-                let x = parse_f64(extract_attr(tag_trimmed, "x"));
-                let y = parse_f64(extract_attr(tag_trimmed, "y"));
-                let w = parse_f64(extract_attr(tag_trimmed, "width"));
-                let h = parse_f64(extract_attr(tag_trimmed, "height"));
+                let mut x = parse_f64(extract_attr(tag_trimmed, "x"));
+                let mut y = parse_f64(extract_attr(tag_trimmed, "y"));
+                let mut w = parse_f64(extract_attr(tag_trimmed, "width"));
+                let mut h = parse_f64(extract_attr(tag_trimmed, "height"));
+                if w == 0.0 && h == 0.0 {
+                    if tag_name == "circle" {
+                        let cx = parse_f64(extract_attr(tag_trimmed, "cx"));
+                        let cy = parse_f64(extract_attr(tag_trimmed, "cy"));
+                        let r = parse_f64(extract_attr(tag_trimmed, "r"));
+                        x = cx - r;
+                        y = cy - r;
+                        w = r * 2.0;
+                        h = r * 2.0;
+                    } else if tag_name == "ellipse" {
+                        let cx = parse_f64(extract_attr(tag_trimmed, "cx"));
+                        let cy = parse_f64(extract_attr(tag_trimmed, "cy"));
+                        let rx = parse_f64(extract_attr(tag_trimmed, "rx"));
+                        let ry = parse_f64(extract_attr(tag_trimmed, "ry"));
+                        x = cx - rx;
+                        y = cy - ry;
+                        w = rx * 2.0;
+                        h = ry * 2.0;
+                    } else if matches!(tag_name.as_str(), "path" | "polygon" | "polyline") {
+                        let d = extract_attr(tag_trimmed, "d")
+                            .or_else(|| extract_attr(tag_trimmed, "points"))
+                            .unwrap_or_default();
+                        if let Some(bb) = compute_path_bbox(&d, Affine2D::identity()) {
+                            x = bb["x"].as_f64().unwrap_or(0.0);
+                            y = bb["y"].as_f64().unwrap_or(0.0);
+                            w = bb["width"].as_f64().unwrap_or(0.0);
+                            h = bb["height"].as_f64().unwrap_or(0.0);
+                        }
+                    }
+                }
                 if w > 0.0 || h > 0.0 {
                     defs_bboxes.insert(id, (x, y, w, h));
                 }
@@ -886,47 +1165,59 @@ pub fn inspect_svg(file_path_or_xml: &str, include_paths: bool, max_elements: us
         }
 
         if tag_name == "text" || tag_name == "tspan" || tag_name == "textpath" {
-            if !is_self_closing {
-                let close_pat = format!("</{}", raw_name);
-                if let Some(close_rel) = raw_xml[pos..].find(&close_pat) {
-                    let inner = &raw_xml[pos..pos + close_rel];
-                    let has_child_tspan = tag_name == "text"
-                        && (inner.contains("<tspan") || inner.contains("<TSPAN"));
-                    let raw_x = extract_attr(tag_trimmed, "x");
-                    let raw_y = extract_attr(tag_trimmed, "y");
-                    let base_x = raw_x
-                        .as_ref()
-                        .map(|v| parse_f64(Some(v.clone())))
-                        .or_else(|| parent_text_xy.map(|p| p.0))
-                        .unwrap_or(0.0);
-                    let base_y = raw_y
-                        .as_ref()
-                        .map(|v| parse_f64(Some(v.clone())))
-                        .or_else(|| parent_text_xy.map(|p| p.1))
-                        .unwrap_or(0.0);
+            if !is_self_closing
+                && let Some((close_start_rel, close_end_rel)) =
+                    find_matching_close(&raw_xml[pos..], &tag_name)
+            {
+                let inner = &raw_xml[pos..pos + close_start_rel];
+                let has_child_tspan = inner.to_ascii_lowercase().contains("<tspan");
+                let raw_x = extract_attr(tag_trimmed, "x");
+                let raw_y = extract_attr(tag_trimmed, "y");
+                let dx = parse_f64(extract_attr(tag_trimmed, "dx"));
+                let dy = parse_f64(extract_attr(tag_trimmed, "dy"));
+                let base_x = raw_x
+                    .as_ref()
+                    .map(|v| parse_f64(Some(v.clone())))
+                    .or_else(|| parent_text_xy.map(|p| p.0))
+                    .unwrap_or(0.0)
+                    + dx;
+                let base_y = raw_y
+                    .as_ref()
+                    .map(|v| parse_f64(Some(v.clone())))
+                    .or_else(|| parent_text_xy.map(|p| p.1))
+                    .unwrap_or(0.0)
+                    + dy;
+                parent_text_xy = Some((base_x, base_y));
+
+                let text_source = if has_child_tspan {
+                    strip_child_tspans(inner)
+                } else {
+                    inner.to_string()
+                };
+                let clean_txt = strip_xml_tags(&text_source);
+                if !clean_txt.is_empty() {
+                    let (tx, ty) = combined_tf.apply(base_x, base_y);
+                    texts.push(json!({
+                        "index": texts.len(),
+                        "tag": tag_name,
+                        "text": clean_txt,
+                        "id": extract_attr(tag_trimmed, "id"),
+                        "class": extract_attr(tag_trimmed, "class"),
+                        "x": round2(tx),
+                        "y": round2(ty),
+                        "font_size": extract_attr(tag_trimmed, "font-size"),
+                        "fill": extract_attr(tag_trimmed, "fill"),
+                        "transform": extract_attr(tag_trimmed, "transform"),
+                    }));
+                }
+                if !has_child_tspan {
+                    pos += close_end_rel;
                     if tag_name == "text" {
-                        parent_text_xy = Some((base_x, base_y));
-                    }
-                    if !has_child_tspan {
-                        let clean_txt = strip_xml_tags(inner);
-                        if !clean_txt.is_empty() {
-                            let (tx, ty) = combined_tf.apply(base_x, base_y);
-                            texts.push(json!({
-                                "index": texts.len(),
-                                "tag": tag_name,
-                                "text": clean_txt,
-                                "id": extract_attr(tag_trimmed, "id"),
-                                "class": extract_attr(tag_trimmed, "class"),
-                                "x": round2(tx),
-                                "y": round2(ty),
-                                "font_size": extract_attr(tag_trimmed, "font-size"),
-                                "fill": extract_attr(tag_trimmed, "fill"),
-                                "transform": extract_attr(tag_trimmed, "transform"),
-                            }));
-                        }
-                        if tag_name == "text" {
-                            pos += close_rel + close_pat.len();
-                            parent_text_xy = None;
+                        parent_text_xy = None;
+                        if tf_stack.len() > 1
+                            && tf_stack.last().map(|(n, _)| n == "text").unwrap_or(false)
+                        {
+                            tf_stack.pop();
                         }
                     }
                 }
@@ -998,19 +1289,21 @@ pub fn inspect_svg(file_path_or_xml: &str, include_paths: bool, max_elements: us
                     Some(bbox_json(tx, ty, tw, th))
                 }
                 "use" => {
-                    let x = parse_f64(extract_attr(tag_trimmed, "x"));
-                    let y = parse_f64(extract_attr(tag_trimmed, "y"));
+                    let mut x = parse_f64(extract_attr(tag_trimmed, "x"));
+                    let mut y = parse_f64(extract_attr(tag_trimmed, "y"));
                     let mut w = parse_f64(extract_attr(tag_trimmed, "width"));
                     let mut h = parse_f64(extract_attr(tag_trimmed, "height"));
-                    if w == 0.0
-                        && h == 0.0
-                        && let Some(href) = extract_attr(tag_trimmed, "href")
-                            .or_else(|| extract_attr(tag_trimmed, "xlink:href"))
+                    if let Some(href) = extract_attr(tag_trimmed, "href")
+                        .or_else(|| extract_attr(tag_trimmed, "xlink:href"))
                     {
                         let ref_id = href.trim_start_matches('#');
-                        if let Some(&(_, _, dw, dh)) = defs_bboxes.get(ref_id) {
-                            w = dw;
-                            h = dh;
+                        if let Some(&(dx, dy, dw, dh)) = defs_bboxes.get(ref_id) {
+                            x += dx;
+                            y += dy;
+                            if w == 0.0 && h == 0.0 {
+                                w = dw;
+                                h = dh;
+                            }
                         }
                     }
                     let (tx, ty, tw, th) = combined_tf.apply_rect(x, y, w, h);
@@ -1990,6 +2283,7 @@ pub fn inspect_image_rust(
     detect_ui_boxes: bool,
     query_text: Option<String>,
     optimize_cli_paths: bool,
+    requested_lang: Option<String>,
 ) -> Value {
     let is_stdin = file_path == "-" || file_path == "stdin";
     let p = Path::new(file_path);
@@ -2011,8 +2305,14 @@ pub fn inspect_image_rust(
 
     let dyn_img = if is_stdin {
         let mut buf = Vec::new();
-        if let Err(e) = std::io::stdin().read_to_end(&mut buf) {
+        if let Err(e) = std::io::stdin()
+            .take(MAX_IMAGE_FILE_BYTES + 1)
+            .read_to_end(&mut buf)
+        {
             return json!({ "ok": false, "error": format!("Failed to read image from stdin: {}", e) });
+        }
+        if (buf.len() as u64) > MAX_IMAGE_FILE_BYTES {
+            return json!({ "ok": false, "error": "Refusing oversized image from stdin (>64 MiB)" });
         }
         match image::load_from_memory(&buf) {
             Ok(img) => img,
@@ -2056,14 +2356,26 @@ pub fn inspect_image_rust(
         let right_w = w.saturating_sub(right_x).max(1);
         let g_normal = if is_dark_mode { 0.58 } else { 1.0 };
 
-        let prepared: Vec<(usize, i32, i32, f64, Vec<u8>, &'static str, &'static str)> = vec![
+        let primary_lang = requested_lang
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("auto")
+            .to_string();
+        let pass3_lang = if primary_lang == "auto" || primary_lang == "ben+eng" {
+            "eng".to_string()
+        } else {
+            primary_lang.clone()
+        };
+
+        let prepared: Vec<(usize, i32, i32, f64, Vec<u8>, String, &'static str)> = vec![
             (
                 0,
                 0,
                 0,
                 base_scale,
                 preprocess_crop_to_pgm(gray, w, h, 0, 0, w, h, base_scale, is_dark_mode, g_normal),
-                "ben+eng",
+                primary_lang.clone(),
                 "11",
             ),
             (
@@ -2083,7 +2395,7 @@ pub fn inspect_image_rust(
                     is_dark_mode,
                     1.0,
                 ),
-                "ben+eng",
+                primary_lang.clone(),
                 "6",
             ),
             (
@@ -2103,7 +2415,7 @@ pub fn inspect_image_rust(
                     is_dark_mode,
                     g_normal,
                 ),
-                "ben+eng",
+                primary_lang,
                 "6",
             ),
             (
@@ -2112,7 +2424,7 @@ pub fn inspect_image_rust(
                 0,
                 base_scale * 1.06,
                 preprocess_crop_adaptive_to_pgm(gray, w, h, 0, 0, w, h, base_scale * 1.06),
-                "eng",
+                pass3_lang,
                 "11",
             ),
         ];
@@ -2139,7 +2451,7 @@ pub fn inspect_image_rust(
                             ry,
                             sc,
                             pgm,
-                            lang,
+                            &lang,
                             psm,
                             optimize_cli_paths,
                         )
@@ -2203,6 +2515,7 @@ pub fn inspect_image_rust(
                             .count()
                             .saturating_sub(d.text.chars().count());
                         if char_diff <= 3
+                            && (b.bbox.width - d.bbox.width) <= 18
                             && d.confidence > b.confidence + 0.15
                             && d.text.chars().count() >= 4
                         {
@@ -2219,6 +2532,7 @@ pub fn inspect_image_rust(
                             .count()
                             .saturating_sub(b.text.chars().count());
                         if char_diff <= 3
+                            && (d.bbox.width - b.bbox.width) <= 18
                             && b.confidence > d.confidence + 0.15
                             && b.text.chars().count() >= 4
                         {
@@ -2229,7 +2543,10 @@ pub fn inspect_image_rust(
                         dup = true;
                         break;
                     } else if overlap >= 0.70 {
-                        if b.text.len() > d.text.len() || b.confidence > d.confidence {
+                        let b_chars = b.text.chars().count();
+                        let d_chars = d.text.chars().count();
+                        if b_chars > d_chars || (b_chars == d_chars && b.confidence > d.confidence)
+                        {
                             *d = b.clone();
                             replaced = true;
                             break;
@@ -2267,6 +2584,8 @@ pub fn inspect_image_rust(
             .map(|b| {
                 let mut cloned = b.clone();
                 let (mb, mc) = compute_word_span_match(&cloned, &ql);
+                cloned.bbox = mb.clone();
+                cloned.center = mc.clone();
                 cloned.match_bbox = Some(mb);
                 cloned.match_center = Some(mc);
                 cloned
@@ -2359,7 +2678,12 @@ fn main() {
                 .get("query_text")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            inspect_image_rust(target, run_ocr, det_boxes, q, opt_paths)
+            let lang = opts
+                .get("lang")
+                .or_else(|| opts.get("language"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            inspect_image_rust(target, run_ocr, det_boxes, q, opt_paths, lang)
         }
         "find_text" => {
             let q = opts
@@ -2371,7 +2695,12 @@ fn main() {
                 .get("optimize_for_cli_paths")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
-            inspect_image_rust(target, true, false, Some(q), opt_paths)
+            let lang = opts
+                .get("lang")
+                .or_else(|| opts.get("language"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            inspect_image_rust(target, true, false, Some(q), opt_paths, lang)
         }
         _ => json!({ "ok": false, "error": format!("Unknown command: {}", cmd) }),
     };
@@ -2430,6 +2759,49 @@ mod tests {
         let u1 = elems.iter().find(|e| e["id"] == "u1").unwrap();
         assert_eq!(u1["bbox"]["width"], 40.0);
         assert_eq!(u1["bbox"]["height"], 20.0);
+    }
+
+    #[test]
+    fn test_svg_rotate_symbol_cdata_and_dx_dy() {
+        let svg = r##"
+        <svg viewBox="0 0 200 200">
+          <symbol id="sym1" viewBox="0 0 24 24"><path d="M0 0h24v24H0z"/></symbol>
+          <defs><path id="p_def" d="M 5 10 l 20 30"/></defs>
+          <g transform="rotate(90 50 50)">
+            <rect id="rot_rect" x="50" y="50" width="20" height="10"/>
+          </g>
+          <text x="10" y="20">Prefix <tspan dx="15" dy="5"><![CDATA[A < B]]>&#x21;</tspan></text>
+          <use id="u_sym" href="#sym1" x="30" y="40"/>
+          <use id="u_path" href="#p_def" x="10" y="10"/>
+        </svg>
+        "##;
+        let res = inspect_svg(svg, true, 500);
+        assert_eq!(res["ok"], true);
+        let texts = res["texts"].as_array().unwrap();
+        assert_eq!(texts.len(), 2);
+        assert_eq!(texts[0]["text"], "Prefix");
+        assert_eq!(texts[0]["x"], 10.0);
+        assert_eq!(texts[0]["y"], 20.0);
+        assert_eq!(texts[1]["text"], "A < B!");
+        assert_eq!(texts[1]["x"], 25.0);
+        assert_eq!(texts[1]["y"], 25.0);
+
+        let elems = res["elements"].as_array().unwrap();
+        let rot = elems.iter().find(|e| e["id"] == "rot_rect").unwrap();
+        assert_eq!(rot["bbox"]["x"], 40.0);
+        assert_eq!(rot["bbox"]["y"], 50.0);
+        assert_eq!(rot["bbox"]["width"], 10.0);
+        assert_eq!(rot["bbox"]["height"], 20.0);
+
+        let u_sym = elems.iter().find(|e| e["id"] == "u_sym").unwrap();
+        assert_eq!(u_sym["bbox"]["width"], 24.0);
+        assert_eq!(u_sym["bbox"]["height"], 24.0);
+
+        let u_path = elems.iter().find(|e| e["id"] == "u_path").unwrap();
+        assert_eq!(u_path["bbox"]["x"], 15.0);
+        assert_eq!(u_path["bbox"]["y"], 20.0);
+        assert_eq!(u_path["bbox"]["width"], 20.0);
+        assert_eq!(u_path["bbox"]["height"], 30.0);
     }
 
     #[test]

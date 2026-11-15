@@ -22,6 +22,20 @@ const TOKEN_FILE = path.join(TOKEN_DIR, 'shellmind-vision.token');
 
 let fallbackBridge = null;
 let ensureDaemonPromise = null;
+let daemonSessionId = '';
+
+function makeRpcError(msg, message) {
+  if (Array.isArray(msg)) {
+    const errs = msg
+      .filter((item) => item && item.id !== undefined)
+      .map((item) => ({ jsonrpc: '2.0', id: item.id, error: { code: -32603, message } }));
+    return errs.length ? errs : null;
+  }
+  if (msg?.id !== undefined) {
+    return { jsonrpc: '2.0', id: msg.id, error: { code: -32603, message } };
+  }
+  return null;
+}
 
 function readAuthToken() {
   try {
@@ -60,6 +74,7 @@ async function forwardToDaemon(msg) {
     const token = readAuthToken();
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
+    if (daemonSessionId) headers['Mcp-Session-Id'] = daemonSessionId;
 
     try {
       const res = await fetch(DAEMON_URL, {
@@ -68,30 +83,18 @@ async function forwardToDaemon(msg) {
         body: JSON.stringify(msg),
         signal: AbortSignal.timeout(120000),
       });
+      const sid = res.headers.get('mcp-session-id');
+      if (sid) daemonSessionId = sid;
       if (res.status === 202) return null;
       if (res.ok) {
         return await res.json();
       }
       const errText = await res.text().catch(() => `HTTP ${res.status}`);
-      if (msg.id !== undefined) {
-        return {
-          jsonrpc: '2.0',
-          id: msg.id,
-          error: { code: -32603, message: `Daemon HTTP ${res.status}: ${errText.slice(0, 200)}` },
-        };
-      }
-      return null;
+      return makeRpcError(msg, `Daemon HTTP ${res.status}: ${errText.slice(0, 200)}`);
     } catch (err) {
       // Only fall back to in-process bridge when connection was refused (never re-execute on mid-flight error)
       if (err?.cause?.code !== 'ECONNREFUSED') {
-        if (msg.id !== undefined) {
-          return {
-            jsonrpc: '2.0',
-            id: msg.id,
-            error: { code: -32603, message: err?.message || String(err) },
-          };
-        }
-        return null;
+        return makeRpcError(msg, err?.message || String(err));
       }
     }
   }

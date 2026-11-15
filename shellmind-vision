@@ -46,6 +46,14 @@ is_running() {
         fi
         rm -f "${PID_FILE}"
     fi
+    local live_pid
+    live_pid="$(curl -fsS --max-time 1 "http://${HOST}:${PORT}/health" 2>/dev/null | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("pid","") if d.get("service")=="ShellMind Vision" else "")' 2>/dev/null || true)"
+    if [[ -n "${live_pid}" ]] && kill -0 "${live_pid}" 2>/dev/null; then
+        if tr '\0' ' ' < "/proc/${live_pid}/cmdline" 2>/dev/null | grep -q "server.mjs"; then
+            echo "${live_pid}" > "${PID_FILE}"
+            return 0
+        fi
+    fi
     return 1
 }
 
@@ -62,12 +70,13 @@ wait_for_health() {
 
 cmd_up() {
     exec 9>"${LOCK_FILE}"
-    if ! flock -n 9; then
-        wait_for_health || true
-        if is_running; then
+    if ! flock -w 10 9; then
+        if wait_for_health && is_running; then
             echo "[ShellMind Vision] Already running (PID $(cat "${PID_FILE}")) on http://${HOST}:${PORT}/mcp"
             return 0
         fi
+        echo "[ShellMind Vision] Timed out waiting for startup lock ${LOCK_FILE}" >&2
+        exit 1
     fi
 
     if is_running; then
@@ -85,12 +94,12 @@ cmd_up() {
     if [[ -n "${XDG_CURRENT_DESKTOP:-}" && "${XDG_CURRENT_DESKTOP,,}" == *gnome* ]]; then
         gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
     fi
-    setsid node "${ROOT_DIR}/server.mjs" >> "${LOG_FILE}" 2>&1 < /dev/null &
+    setsid node "${ROOT_DIR}/server.mjs" >> "${LOG_FILE}" 2>&1 < /dev/null 9>&- &
     local pid=$!
     disown "${pid}" 2>/dev/null || true
     echo "${pid}" > "${PID_FILE}"
-    if wait_for_health; then
-        echo "[ShellMind Vision] Started successfully (PID ${pid})"
+    if wait_for_health && is_running; then
+        echo "[ShellMind Vision] Started successfully (PID $(cat "${PID_FILE}"))"
         echo "  • Streamable HTTP MCP : http://${HOST}:${PORT}/mcp"
         echo "  • SSE MCP Endpoint    : http://${HOST}:${PORT}/sse"
         echo "  • Health Probe        : http://${HOST}:${PORT}/health"
@@ -107,6 +116,11 @@ cmd_down() {
         local pid
         pid="$(cat "${PID_FILE}")"
         kill "${pid}" 2>/dev/null || true
+        for _ in $(seq 1 30); do
+            kill -0 "${pid}" 2>/dev/null || break
+            sleep 0.1
+        done
+        kill -9 "${pid}" 2>/dev/null || true
         rm -f "${PID_FILE}"
         echo "[ShellMind Vision] Stopped (PID ${pid})"
     else
@@ -153,13 +167,26 @@ cmd_lang() {
                 exit 1
             fi
             echo "[ShellMind Vision] Fetching language '${lang}' on-demand from official fast quantized registry..."
-            ROOT_DIR="${ROOT_DIR}" node -e '
-              import(process.env.ROOT_DIR + "/lib/bridge.mjs").then(async (m) => {
-                const b = new m.CulMcpBridge();
-                const res = await b.callTool("ensure_language", { language: process.argv[1] });
-                console.log(res.content[0].text);
-              });
-            ' "${lang}"
+            local token_file="${ROOT_DIR}/data/shellmind-vision.token"
+            if is_running && [[ -f "${token_file}" ]]; then
+                local token
+                token="$(tr -d '[:space:]' < "${token_file}")"
+                curl -fsS --max-time 60 -X POST "http://${HOST}:${PORT}/mcp" \
+                    -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer ${token}" \
+                    --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"ensure_language\",\"arguments\":{\"language\":\"${lang}\"}}}" \
+                    | python3 -c 'import sys,json; r=json.load(sys.stdin).get("result",{}); print(r.get("content",[{}])[0].get("text","")); sys.exit(1 if r.get("isError") else 0)'
+            else
+                ROOT_DIR="${ROOT_DIR}" node -e '
+                  import { pathToFileURL } from "node:url";
+                  import(pathToFileURL(process.env.ROOT_DIR + "/lib/bridge.mjs").href).then(async (m) => {
+                    const b = new m.CulMcpBridge();
+                    const res = await b.callTool("ensure_language", { language: process.argv[1] });
+                    console.log(res.content[0].text);
+                    if (res.isError) process.exit(1);
+                  });
+                ' "${lang}"
+            fi
             ;;
         *)
             echo "Usage: shellmind-vision lang {list|add <lang_code|all>}"
