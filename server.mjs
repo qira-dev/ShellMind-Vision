@@ -17,6 +17,12 @@ const ROOT_DIR = process.env.SHELLMIND_VISION_ROOT || __dirname;
 const PORT = Number(process.env.SHELLMIND_VISION_PORT || process.env.DESKTOP_UI_MCP_PORT) || 39200;
 const HOST = process.env.SHELLMIND_VISION_HOST || process.env.DESKTOP_UI_MCP_HOST || '127.0.0.1';
 
+let PKG_VERSION = '2.1.5';
+try {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+  if (typeof pkg.version === 'string' && pkg.version.trim()) PKG_VERSION = pkg.version.trim();
+} catch {}
+
 const TOKEN_DIR = path.join(ROOT_DIR, 'data');
 const TOKEN_FILE = path.join(TOKEN_DIR, 'shellmind-vision.token');
 fs.mkdirSync(TOKEN_DIR, { recursive: true });
@@ -30,14 +36,22 @@ if (!AUTH_TOKEN || AUTH_TOKEN.length < 32) {
 }
 try { fs.chmodSync(TOKEN_FILE, 0o600); } catch {}
 
-const ALLOWED_HOSTS = new Set([
-  `${HOST}:${PORT}`,
+const LOCAL_HOSTS = new Set([
+  `${HOST}:${PORT}`.toLowerCase(),
   `127.0.0.1:${PORT}`,
   `localhost:${PORT}`,
   `[::1]:${PORT}`,
 ]);
+
+const ALLOWED_HOSTS = new Set(LOCAL_HOSTS);
+for (const entry of String(process.env.SHELLMIND_VISION_ALLOWED_HOSTS || '').split(',')) {
+  const h = entry.trim().toLowerCase();
+  if (!h || h.includes('*') || h.includes('/') || h.includes('://') || /\s/.test(h)) continue;
+  ALLOWED_HOSTS.add(h);
+}
+
 const MAX_SSE_SESSIONS = 64;
-const SUPPORTED_PROTOCOLS = new Set(['2024-11-05', '2025-03-26', '2025-06-18']);
+const SUPPORTED_PROTOCOLS = new Set(['2024-11-05', '2025-03-26', '2025-06-18', '2025-11-25']);
 
 const bridge = new CulMcpBridge();
 const sseSessions = new Map();
@@ -58,8 +72,25 @@ function reject(res, status, message) {
   return sendJson(res, status, { error: message });
 }
 
+function hasValidBearer(req) {
+  const rawAuth = String(req.headers.authorization || '');
+  const provided = rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
+  const a = Buffer.from(provided);
+  const b = Buffer.from(AUTH_TOKEN);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function isDirectLocalHealthCaller(req) {
+  const host = String(req.headers.host || '').toLowerCase();
+  return (
+    LOCAL_HOSTS.has(host) &&
+    !req.headers['x-forwarded-for'] &&
+    !req.headers['cf-connecting-ip']
+  );
+}
+
 function guardRequest(req, res, requireAuth = true) {
-  const host = String(req.headers.host || '');
+  const host = String(req.headers.host || '').toLowerCase();
   if (!ALLOWED_HOSTS.has(host)) {
     reject(res, 403, 'Forbidden Host');
     return false;
@@ -75,15 +106,9 @@ function guardRequest(req, res, requireAuth = true) {
       return false;
     }
   }
-  if (requireAuth) {
-    const rawAuth = String(req.headers.authorization || '');
-    const provided = rawAuth.startsWith('Bearer ') ? rawAuth.slice(7).trim() : '';
-    const a = Buffer.from(provided);
-    const b = Buffer.from(AUTH_TOKEN);
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-      reject(res, 401, 'Unauthorized');
-      return false;
-    }
+  if (requireAuth && !hasValidBearer(req)) {
+    reject(res, 401, 'Unauthorized');
+    return false;
   }
   return true;
 }
@@ -143,14 +168,21 @@ const server = http.createServer(async (req, res) => {
     // Fast static liveness probe (never spawns upstream helper)
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/health' || url.pathname === '/status')) {
       if (!guardRequest(req, res, false)) return;
+      if (isDirectLocalHealthCaller(req) || hasValidBearer(req)) {
+        return sendJson(res, 200, {
+          ok: true,
+          service: 'ShellMind Vision',
+          version: PKG_VERSION,
+          pid: process.pid,
+          root: ROOT_DIR,
+          host: HOST,
+          port: PORT,
+        });
+      }
       return sendJson(res, 200, {
         ok: true,
         service: 'ShellMind Vision',
-        version: '2.1.0',
-        pid: process.pid,
-        root: ROOT_DIR,
-        host: HOST,
-        port: PORT,
+        version: PKG_VERSION,
       });
     }
 

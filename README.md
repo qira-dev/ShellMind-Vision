@@ -129,6 +129,16 @@ shellmind-vision lang add all       # Install all 123 language models
 * **SSE Endpoint:** `http://127.0.0.1:39200/sse`
 * **Health Endpoint:** `http://127.0.0.1:39200/health`
 
+### 3. Remote Tunnel / Reverse Proxy (Opt-In: Cloudflare Tunnel, Caddy, Nginx)
+By default, the daemon binds strictly to `127.0.0.1:39200` and rejects any non-localhost `Host` header (`403 Forbidden Host`). To expose it safely over your own HTTPS domain while keeping `Authorization: Bearer` enforcement and hiding local filesystem paths from remote `/health` probes:
+
+```bash
+SHELLMIND_VISION_ALLOWED_HOSTS="vision.example.com" ./shellmind-vision up
+```
+
+* Pass multiple domains comma-separated (`vision.example.com,mcp.example.com`); wildcards (`*`) are rejected.
+* Remote clients must send `Authorization: Bearer <token>` (from `data/shellmind-vision.token`, mode `0600`).
+
 ---
 
 ## Tool Inventory (27 Tools)
