@@ -56,6 +56,7 @@ async function isDaemonUp() {
 
 async function ensureDaemonStarted() {
   if (await isDaemonUp()) return true;
+  if (process.platform === 'win32') return false;
   if (ensureDaemonPromise) return ensureDaemonPromise;
 
   ensureDaemonPromise = new Promise((resolve) => {
