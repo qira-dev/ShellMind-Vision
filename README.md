@@ -3,7 +3,7 @@
 **Deterministic OS-Level Vision, Sub-Pixel OCR, and Accessibility Automation Engine for AI Agents**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-0969da.svg)](LICENSE)
-[![Platform: Linux Wayland & X11](https://img.shields.io/badge/Platform-Linux%20Wayland%20%26%20X11-1f2328.svg)](#)
+[![Platform: Linux | macOS | Windows](https://img.shields.io/badge/Platform-Linux_%7C_macOS_%7C_Windows-1f2328.svg)](#)
 [![Core: Rust + C++ AVX2](https://img.shields.io/badge/Engine-Rust%20%2B%20C%2B%2B%20AVX2-0969da.svg)](#)
 
 ShellMind Vision replaces probabilistic Vision LLM coordinate guessing with deterministic OS introspection and sub-pixel optical extraction. Built in Rust and C++ (AVX2 SIMD), it processes frames entirely in RAM (zero temporary disk writes), sharpens small 9-10px terminal and UI fonts via a 3x3 Laplacian Unsharp Mask, and fuses optical bounding boxes with live OS accessibility tree (`AT-SPI2`) ground-truth strings.
@@ -27,12 +27,16 @@ Full technical specification and sub-system plots: [`benchmark.html`](benchmark.
 
 ---
 
-## Single-Command Installation
+## Single-Command Installation (Linux, macOS & Windows)
 
-Install and start the self-contained ShellMind Vision daemon on Ubuntu/Debian (bundles portable runtime automatically if Node.js is absent; requires zero root privileges):
-
+### Linux & macOS
 ```bash
 curl -fsSL https://raw.githubusercontent.com/qira-dev/ShellMind-Vision/main/install.sh | bash
+```
+
+### Windows (PowerShell 5+ / 7+)
+```powershell
+irm https://raw.githubusercontent.com/qira-dev/ShellMind-Vision/main/install.ps1 | iex
 ```
 
 ---

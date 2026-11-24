@@ -27,12 +27,64 @@ fn resolve_ocr_paths(requested_lang: Option<&str>) -> (String, String, String, S
         })
         .unwrap_or_else(|| ".".to_string());
 
-    let tess_bin = format!("{}/native_ocr/root/usr/bin/tesseract", root);
-    let tess_lib = format!("{}/native_ocr/root/usr/lib/x86_64-linux-gnu", root);
-    let tess_data = format!(
-        "{}/native_ocr/root/usr/share/tesseract-ocr/5/tessdata",
-        root
-    );
+    let root_path = Path::new(&root);
+    let tess_bin = if cfg!(target_os = "windows") {
+        let bundled = root_path
+            .join("native_ocr")
+            .join("win")
+            .join("tesseract.exe");
+        if bundled.exists() {
+            bundled.to_string_lossy().to_string()
+        } else {
+            "tesseract.exe".to_string()
+        }
+    } else if cfg!(target_os = "macos") {
+        let brew_arm = Path::new("/opt/homebrew/bin/tesseract");
+        let brew_intel = Path::new("/usr/local/bin/tesseract");
+        if brew_arm.exists() {
+            brew_arm.to_string_lossy().to_string()
+        } else if brew_intel.exists() {
+            brew_intel.to_string_lossy().to_string()
+        } else {
+            "tesseract".to_string()
+        }
+    } else {
+        root_path
+            .join("native_ocr")
+            .join("root")
+            .join("usr")
+            .join("bin")
+            .join("tesseract")
+            .to_string_lossy()
+            .to_string()
+    };
+    let tess_lib = root_path
+        .join("native_ocr")
+        .join("root")
+        .join("usr")
+        .join("lib")
+        .join("x86_64-linux-gnu")
+        .to_string_lossy()
+        .to_string();
+    let bundled_tessdata = root_path
+        .join("native_ocr")
+        .join("root")
+        .join("usr")
+        .join("share")
+        .join("tesseract-ocr")
+        .join("5")
+        .join("tessdata");
+    let tess_data = if bundled_tessdata.exists() {
+        bundled_tessdata.to_string_lossy().to_string()
+    } else {
+        env::var("TESSDATA_PREFIX").unwrap_or_else(|_| {
+            if cfg!(target_os = "macos") && Path::new("/opt/homebrew/share/tessdata").exists() {
+                "/opt/homebrew/share/tessdata".to_string()
+            } else {
+                bundled_tessdata.to_string_lossy().to_string()
+            }
+        })
+    };
 
     let mut installed: Vec<String> = Vec::new();
     if let Ok(entries) = fs::read_dir(&tess_data) {
@@ -1988,11 +2040,14 @@ fn run_tesseract_tsv_region(
         lang
     };
     let run_once = |bin: &str, use_bundled_lib: bool| -> Result<std::process::Output, String> {
-        let mut cmd = Command::new("/usr/bin/nice");
+        let mut cmd = if cfg!(target_os = "linux") && Path::new("/usr/bin/nice").exists() {
+            let mut c = Command::new("/usr/bin/nice");
+            c.args(["-n", "15", bin]);
+            c
+        } else {
+            Command::new(bin)
+        };
         cmd.args([
-            "-n",
-            "15",
-            bin,
             "stdin",
             "stdout",
             "-l",
@@ -2003,14 +2058,16 @@ fn run_tesseract_tsv_region(
             psm,
             "tsv",
         ])
-        .env("TESSDATA_PREFIX", &tess_data)
         .env("OMP_THREAD_LIMIT", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-        if use_bundled_lib {
+        if !tess_data.is_empty() && Path::new(&tess_data).exists() {
+            cmd.env("TESSDATA_PREFIX", &tess_data);
+        }
+        if cfg!(target_os = "linux") && use_bundled_lib && Path::new(&tess_lib).exists() {
             cmd.env("LD_LIBRARY_PATH", &tess_lib);
-        } else {
+        } else if cfg!(target_os = "linux") {
             cmd.env_remove("LD_LIBRARY_PATH");
         }
         let mut child = cmd.spawn().map_err(|e| format!("spawn {}: {}", bin, e))?;

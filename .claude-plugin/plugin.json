@@ -1,6 +1,6 @@
 {
   "name": "shellmind-vision",
-  "version": "2.1.5",
+  "version": "2.2.0",
   "description": "Deterministic OS-level Vision, 123-language AVX2 OCR, pure-Rust SVG parser, and AT-SPI2 desktop automation MCP plugin for AI agents.",
   "author": {
     "name": "Qira-Dev",

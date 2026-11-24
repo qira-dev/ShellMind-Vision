@@ -1,6 +1,6 @@
 {
   "name": "shellmind-vision",
-  "version": "2.1.5",
+  "version": "2.2.0",
   "description": "Universal Zero-Hallucination Desktop Automation Engine & MCP Plugin for AI Agents",
   "main": "server.mjs",
   "type": "module",

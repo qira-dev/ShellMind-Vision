@@ -17,16 +17,16 @@ echo -e "${BOLD}${BLUE}=== ShellMind Vision Installer (Zero-Hallucination Deskto
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
-if [[ "${OS}" != "Linux" ]]; then
-    echo -e "${RED}[!] Currently ShellMind Vision automated installer supports Linux (Ubuntu 22.04 / 24.04 / 26.04 GNOME Wayland & X11).${NC}"
-    echo -e "    Windows & macOS native engine adapters are in development."
-    exit 1
-fi
-
-if [[ "${ARCH}" != "x86_64" ]]; then
-    echo -e "${RED}[!] Error: Pre-built binaries target Linux x86_64 (detected: ${ARCH}).${NC}"
-    exit 1
-fi
+case "${OS}:${ARCH}" in
+    Linux:x86_64|Linux:amd64)   NODE_PLAT="linux-x64" ;;
+    Linux:aarch64|Linux:arm64) NODE_PLAT="linux-arm64" ;;
+    Darwin:x86_64)             NODE_PLAT="darwin-x64" ;;
+    Darwin:arm64)              NODE_PLAT="darwin-arm64" ;;
+    *)
+        echo -e "${RED}[!] Unsupported platform: ${OS} ${ARCH}. Use install.ps1 on Windows.${NC}"
+        exit 1
+        ;;
+esac
 
 INSTALL_DIR="${HOME}/.local/share/shellmind-vision"
 BIN_DIR="${HOME}/.local/bin"
@@ -63,29 +63,40 @@ if [[ "${NEED_NODE}" -eq 1 && ! -x "${TARGET_DIR}/runtime/node/bin/node" ]]; the
     mkdir -p "${TARGET_DIR}/runtime"
     TMP_NODE_DIR="$(mktemp -d)"
     NODE_VER="v22.14.0"
-    NODE_ARCHIVE="node-${NODE_VER}-linux-x64.tar.xz"
+    NODE_ARCHIVE="node-${NODE_VER}-${NODE_PLAT}.tar.xz"
     curl -fsSL "https://nodejs.org/dist/${NODE_VER}/${NODE_ARCHIVE}" -o "${TMP_NODE_DIR}/${NODE_ARCHIVE}"
     curl -fsSL "https://nodejs.org/dist/${NODE_VER}/SHASUMS256.txt" -o "${TMP_NODE_DIR}/SHASUMS256.txt"
-    (cd "${TMP_NODE_DIR}" && grep " ${NODE_ARCHIVE}\$" SHASUMS256.txt | sha256sum -c -)
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd "${TMP_NODE_DIR}" && grep " ${NODE_ARCHIVE}\$" SHASUMS256.txt | sha256sum -c -)
+    else
+        (cd "${TMP_NODE_DIR}" && grep " ${NODE_ARCHIVE}\$" SHASUMS256.txt | shasum -a 256 -c -)
+    fi
     tar -xJf "${TMP_NODE_DIR}/${NODE_ARCHIVE}" -C "${TARGET_DIR}/runtime"
-    mv "${TARGET_DIR}/runtime/node-${NODE_VER}-linux-x64" "${TARGET_DIR}/runtime/node"
+    mv "${TARGET_DIR}/runtime/node-${NODE_VER}-${NODE_PLAT}" "${TARGET_DIR}/runtime/node"
     rm -rf "${TMP_NODE_DIR}"
 fi
 
 ORIG_PATH="${PATH}"
 export PATH="${TARGET_DIR}/runtime/node/bin:${BIN_DIR}:${PATH}"
 
-# 2. Install & verify GNOME Shell Extension
-if [[ -d "${TARGET_DIR}/gnome-extension/computer-use-linux@avifenesh.dev" ]]; then
-    echo -e "${BLUE}[*] Registering GNOME Shell Wayland Extension...${NC}"
-    rm -rf "${EXT_DIR}"
-    cp -r "${TARGET_DIR}/gnome-extension/computer-use-linux@avifenesh.dev" "${EXT_DIR}"
-    gnome-extensions enable computer-use-linux@avifenesh.dev 2>/dev/null || true
+# 2. Platform-specific setup (Linux GNOME vs macOS Accessibility)
+if [[ "${OS}" == "Linux" ]]; then
+    if [[ -d "${TARGET_DIR}/gnome-extension/computer-use-linux@avifenesh.dev" ]]; then
+        echo -e "${BLUE}[*] Registering GNOME Shell Wayland Extension...${NC}"
+        rm -rf "${EXT_DIR}"
+        cp -r "${TARGET_DIR}/gnome-extension/computer-use-linux@avifenesh.dev" "${EXT_DIR}"
+        gnome-extensions enable computer-use-linux@avifenesh.dev 2>/dev/null || true
+    fi
+    echo -e "${BLUE}[*] Enabling GNOME toolkit-accessibility...${NC}"
+    gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
+else
+    echo -e "${BLUE}[*] Configuring macOS Accessibility helper & building native vision engine if cargo is available...${NC}"
+    chmod +x "${TARGET_DIR}/lib/mac_helper.sh"
+    if command -v cargo >/dev/null 2>&1 && [[ -d "${TARGET_DIR}/src/desktop-vision-rs" ]]; then
+        (cd "${TARGET_DIR}/src/desktop-vision-rs" && cargo build --release --jobs 2 && cp target/release/desktop-vision-rs "${TARGET_DIR}/bin/desktop-vision-rs") || true
+    fi
+    echo -e "${YELLOW}[!] On macOS, grant Accessibility & Screen Recording permissions to your terminal/IDE in System Settings -> Privacy & Security.${NC}"
 fi
-
-# 3. Enable toolkit accessibility
-echo -e "${BLUE}[*] Enabling GNOME toolkit-accessibility...${NC}"
-gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
 
 # 4. Symlink executable to ~/.local/bin/shellmind-vision
 chmod +x "${TARGET_DIR}/shellmind-vision" "${TARGET_DIR}/server.mjs" "${TARGET_DIR}/mcp-stdio.mjs" \

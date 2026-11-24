@@ -17,7 +17,7 @@ const ROOT_DIR = process.env.SHELLMIND_VISION_ROOT || __dirname;
 const PORT = Number(process.env.SHELLMIND_VISION_PORT || process.env.DESKTOP_UI_MCP_PORT) || 39200;
 const HOST = process.env.SHELLMIND_VISION_HOST || process.env.DESKTOP_UI_MCP_HOST || '127.0.0.1';
 
-let PKG_VERSION = '2.1.5';
+let PKG_VERSION = '2.2.0';
 try {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
   if (typeof pkg.version === 'string' && pkg.version.trim()) PKG_VERSION = pkg.version.trim();
